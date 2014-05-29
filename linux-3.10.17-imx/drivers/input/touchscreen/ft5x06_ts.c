@@ -111,33 +111,98 @@ static void ft5x06_report_value(struct input_dev *input,
 
 static irqreturn_t ft5x06_ts_interrupt(int irq, void *dev_id)
 {
-	struct ft5x06_chip_data *ft5x06_ts = dev_id;
+	struct ft5x06_chip_data *ft5x06 = dev_id;
 	struct touch_data touchdata;
 
-	if (!ft5x06_read_data(ft5x06_ts->client, &touchdata))
-		ft5x06_report_value(ft5x06_ts->input, &touchdata);
+	if (!ft5x06_read_data(ft5x06->client, &touchdata))
+		ft5x06_report_value(ft5x06->input, &touchdata);
 
 	return IRQ_HANDLED;
+}
+
+#define ID_G_THGROUP_OFFSET		0x80
+#define ID_G_THPEAK_OFFSET		0x81
+#define ID_G_THCAL_OFFSET		0x82
+#define ID_G_THWATER_OFFSET		0x83
+#define ID_G_THTEMP_OFFSET		0x84
+#define ID_G_THDIFF_OFFSET		0x85
+#define ID_G_CTRL_OFFSET		0x86
+#define ID_G_TIMEENTERMONITOR_OFFSET	0x87
+#define ID_G_PERIODACTIVE_OFFSET	0x88
+#define ID_G_PERIODMONITOR_OFFSET	0x89
+
+static inline s32
+ft5x06_write_reg(const struct i2c_client *client, u8 addr, u8 val)
+{
+	return i2c_smbus_write_byte_data(client, addr, val);
+}
+
+static int ft5x06_ts_hw_init(struct ft5x06_chip_data *chip)
+{
+	struct i2c_client *client = chip->client;
+	struct device_node *of_node = client->dev.of_node;
+	struct device_node *np;
+	u32 val;
+	int err;
+
+	np = of_get_child_by_name(of_node, "cfg-regs");
+	if (!np) {
+		dev_info(&client->dev,
+			"No config data found, skip initialization.\n");
+		return 0;
+	}
+
+	err = of_property_read_u32(np, "id-g-thgroup", &val);
+	if (!err)
+		ft5x06_write_reg(client, ID_G_THGROUP_OFFSET, val);
+	err = of_property_read_u32(np, "id-g-thpeak", &val);
+	if (!err)
+		ft5x06_write_reg(client, ID_G_THPEAK_OFFSET, val);
+	err = of_property_read_u32(np, "id-g-thcal", &val);
+	if (!err)
+		ft5x06_write_reg(client, ID_G_THCAL_OFFSET, val);
+	err = of_property_read_u32(np, "id-g-thwater", &val);
+	if (!err)
+		ft5x06_write_reg(client, ID_G_THWATER_OFFSET, val);
+	err = of_property_read_u32(np, "id-g-thtemp", &val);
+	if (!err)
+		ft5x06_write_reg(client, ID_G_THTEMP_OFFSET, val);
+	err = of_property_read_u32(np, "id-g-thdiff", &val);
+	if (!err)
+		ft5x06_write_reg(client, ID_G_THDIFF_OFFSET, val);
+	err = of_property_read_u32(np, "id-g-ctrl", &val);
+	if (!err)
+		ft5x06_write_reg(client, ID_G_CTRL_OFFSET, val);
+	err = of_property_read_u32(np, "id-g-timeentermonitor", &val);
+	if (!err)
+		ft5x06_write_reg(client, ID_G_TIMEENTERMONITOR_OFFSET, val);
+	err = of_property_read_u32(np, "id-g-periodactive", &val);
+	if (!err)
+		ft5x06_write_reg(client, ID_G_PERIODACTIVE_OFFSET, val);
+	err = of_property_read_u32(np, "id-g-periodmonitor", &val);
+	if (!err)
+		ft5x06_write_reg(client, ID_G_PERIODMONITOR_OFFSET, val);
+
+	return 0;
 }
 
 static int 
 ft5x06_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-	struct ft5x06_chip_data *ft5x06_ts;
+	struct ft5x06_chip_data *ft5x06;
 	struct input_dev *input;
-	struct device_node *of_node = client->dev.of_node;
 	int err = 0;
 
-	ft5x06_ts = kzalloc(sizeof(*ft5x06_ts), GFP_KERNEL);
+	ft5x06 = kzalloc(sizeof(*ft5x06), GFP_KERNEL);
 	input = input_allocate_device();
-	if (!ft5x06_ts || !input) {
+	if (!ft5x06 || !input) {
 		dev_err(&client->dev, "Failed to alocate memory\n");
 		err = -ENOMEM;
 		goto exit_free_mem;
 	}
 
-	ft5x06_ts->client = client;
-	ft5x06_ts->input = input;
+	ft5x06->client = client;
+	ft5x06->input = input;
 
 	input->name = DEVICE_NAME;
 	input->id.bustype = BUS_I2C;
@@ -157,9 +222,15 @@ ft5x06_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	input_set_abs_params(input, ABS_MT_POSITION_X, 0, SCREEN_MAX_X, 0, 0);
 	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, SCREEN_MAX_Y, 0, 0);
 
+	err = ft5x06_ts_hw_init(ft5x06);
+	if (err < 0) {
+		dev_err(&client->dev, "Failed to initialize ft5x06.\n");
+		goto exit_free_mem;
+	}
+
 	err = request_threaded_irq(client->irq, NULL, ft5x06_ts_interrupt,
 				   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
-				   "ft5x06_ts", ft5x06_ts);
+				   "ft5x06_ts", ft5x06);
 	if (err < 0) {
 		dev_err(&client->dev, "Failed to register interrupt\n");
 		goto exit_free_mem;
@@ -173,25 +244,25 @@ ft5x06_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto exit_free_irq;
 	}
 
-	i2c_set_clientdata(client, ft5x06_ts);
+	i2c_set_clientdata(client, ft5x06);
 
 	return 0;
 
 exit_free_irq:
-	free_irq(client->irq, ft5x06_ts);
+	free_irq(client->irq, ft5x06);
 exit_free_mem:
 	input_free_device(input);
-	kfree(ft5x06_ts);
+	kfree(ft5x06);
 	return err;
 }
 
 static int ft5x06_ts_remove(struct i2c_client *client)
 {
-	struct ft5x06_chip_data *ft5x06_ts = i2c_get_clientdata(client);
+	struct ft5x06_chip_data *ft5x06 = i2c_get_clientdata(client);
 
-	free_irq(client->irq, ft5x06_ts);
-	input_unregister_device(ft5x06_ts->input);
-	kfree(ft5x06_ts);
+	free_irq(client->irq, ft5x06);
+	input_unregister_device(ft5x06->input);
+	kfree(ft5x06);
 
 	return 0;
 }

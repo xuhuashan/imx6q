@@ -263,10 +263,23 @@
 	status = "okay";
 
 	ft5x06: ft5x06_ts@38 {
-		compatible = "focaltech,ft5x06", "focaltech,ft5x0x";
+		compatible = "focaltech,ft5x06";
 		reg = <0x38>;
 		interrupt-parent = <&gpio1>;
 		interrupts = <9 2>;
+
+		cfg-regs {
+			id-g-thgroup = <0x46>;
+			id-g-thpeak = <0xff>;
+			id-g-thcal = <0xff>;
+			id-g-thwater = <0x3c>;
+			id-g-thtemp = <0x0a>;
+			id-g-thdiff = <0x14>;
+			id-g-ctrl = <0x0>;
+			id-g-timeentermonitor = <0x2>;
+			id-g-periodactive = <0x0c>;
+			id-g-periodmonitor = <0x28>;
+		};
 	};
 };
 
