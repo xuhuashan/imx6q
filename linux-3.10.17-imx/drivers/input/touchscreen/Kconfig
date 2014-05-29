@@ -256,6 +256,18 @@ config TOUCHSCREEN_ELAN
 	  To compile this driver as a module, choose M here: the
 	  module will be called elan-touch.
 
+config TOUCHSCREEN_FT5X06
+	tristate "FocalTech FT5X06 touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have the FT5X06 touchscreen connected to your
+	  system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ft5x06-ts.
+
 config TOUCHSCREEN_FUJITSU
 	tristate "Fujitsu serial touchscreen"
 	select SERIO

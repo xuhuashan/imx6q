@@ -125,6 +125,8 @@ struct wm8960_priv {
 	struct snd_soc_dapm_widget *out3;
 	bool deemph;
 	int playback_fs;
+	bool shared_lrclk;
+	bool capless;
 };
 
 #define wm8960_reset(c)	snd_soc_write(c, WM8960_RESET, 0)
@@ -440,7 +442,6 @@ static const struct snd_soc_dapm_route audio_paths_capless[] = {
 
 static int wm8960_add_widgets(struct snd_soc_codec *codec)
 {
-	struct wm8960_data *pdata = codec->dev->platform_data;
 	struct wm8960_priv *wm8960 = snd_soc_codec_get_drvdata(codec);
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_dapm_widget *w;
@@ -453,7 +454,7 @@ static int wm8960_add_widgets(struct snd_soc_codec *codec)
 	/* In capless mode OUT3 is used to provide VMID for the
 	 * headphone outputs, otherwise it is used as a mono mixer.
 	 */
-	if (pdata && pdata->capless) {
+	if (wm8960->capless) {
 		snd_soc_dapm_new_controls(dapm, wm8960_dapm_widgets_capless,
 					  ARRAY_SIZE(wm8960_dapm_widgets_capless));
 
@@ -964,17 +965,12 @@ static int wm8960_resume(struct snd_soc_codec *codec)
 static int wm8960_probe(struct snd_soc_codec *codec)
 {
 	struct wm8960_priv *wm8960 = snd_soc_codec_get_drvdata(codec);
-	struct wm8960_data *pdata = dev_get_platdata(codec->dev);
 	int ret;
 
 	wm8960->set_bias_level = wm8960_set_bias_level_out3;
 
-	if (!pdata) {
-		dev_warn(codec->dev, "No platform data supplied\n");
-	} else {
-		if (pdata->capless)
-			wm8960->set_bias_level = wm8960_set_bias_level_capless;
-	}
+	if (wm8960->capless)
+		wm8960->set_bias_level = wm8960_set_bias_level_capless;
 
 	ret = snd_soc_codec_set_cache_io(codec, 7, 9, SND_SOC_REGMAP);
 	if (ret < 0) {
@@ -1042,6 +1038,7 @@ static int wm8960_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {
 	struct wm8960_data *pdata = dev_get_platdata(&i2c->dev);
+	struct device_node *np = i2c->dev.of_node;
 	struct wm8960_priv *wm8960;
 	int ret;
 
@@ -1054,7 +1051,16 @@ static int wm8960_i2c_probe(struct i2c_client *i2c,
 	if (IS_ERR(wm8960->regmap))
 		return PTR_ERR(wm8960->regmap);
 
-	if (pdata && pdata->shared_lrclk) {
+	if (pdata) {
+		wm8960->shared_lrclk = pdata->shared_lrclk;
+		wm8960->capless = pdata->capless;
+	}
+	else if(np) {
+		wm8960->shared_lrclk = of_property_read_bool(np, "shared_lrclk");
+		wm8960->capless = of_property_read_bool(np, "capless");
+	}
+
+	if (wm8960->shared_lrclk) {
 		ret = regmap_update_bits(wm8960->regmap, WM8960_ADDCTL2,
 					 0x4, 0x4);
 		if (ret != 0) {
@@ -1084,10 +1090,17 @@ static const struct i2c_device_id wm8960_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, wm8960_i2c_id);
 
+static const struct of_device_id wm8960_of_match[] = {
+	{ .compatible = "wlf,wm8960", },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, wm8960_of_match);
+
 static struct i2c_driver wm8960_i2c_driver = {
 	.driver = {
 		.name = "wm8960",
 		.owner = THIS_MODULE,
+		.of_match_table = wm8960_of_match,
 	},
 	.probe =    wm8960_i2c_probe,
 	.remove =   wm8960_i2c_remove,
