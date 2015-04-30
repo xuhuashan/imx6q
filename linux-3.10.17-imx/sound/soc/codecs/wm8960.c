@@ -985,7 +985,10 @@ static int wm8960_probe(struct snd_soc_codec *codec)
 	}
 
 	wm8960->set_bias_level(codec, SND_SOC_BIAS_STANDBY);
-
+	
+	if(wm8960->shared_lrclk)
+	       snd_soc_update_bits(codec, WM8960_ADDCTL2, 0x4, 0x4);
+	
 	/* Latch the update bits */
 	snd_soc_update_bits(codec, WM8960_LINVOL, 0x100, 0x100);
 	snd_soc_update_bits(codec, WM8960_RINVOL, 0x100, 0x100);
@@ -1058,16 +1061,6 @@ static int wm8960_i2c_probe(struct i2c_client *i2c,
 	else if(np) {
 		wm8960->shared_lrclk = of_property_read_bool(np, "shared_lrclk");
 		wm8960->capless = of_property_read_bool(np, "capless");
-	}
-
-	if (wm8960->shared_lrclk) {
-		ret = regmap_update_bits(wm8960->regmap, WM8960_ADDCTL2,
-					 0x4, 0x4);
-		if (ret != 0) {
-			dev_err(&i2c->dev, "Failed to enable LRCM: %d\n",
-				ret);
-			return ret;
-		}
 	}
 
 	i2c_set_clientdata(i2c, wm8960);
