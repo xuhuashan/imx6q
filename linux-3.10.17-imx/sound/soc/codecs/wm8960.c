@@ -265,7 +265,7 @@ SOC_SINGLE("ALC Attack", WM8960_ALC3, 0, 15, 0),
 SOC_SINGLE("Noise Gate Threshold", WM8960_NOISEG, 3, 31, 0),
 SOC_SINGLE("Noise Gate Switch", WM8960_NOISEG, 0, 1, 0),
 
-SOC_DOUBLE_R("ADC PCM Capture Volume", WM8960_LINPATH, WM8960_RINPATH,
+SOC_DOUBLE_R("ADC PCM Capture Volume", WM8960_LADC, WM8960_RADC,
 	0, 127, 0),
 
 SOC_SINGLE_TLV("Left Output Mixer Boost Bypass Volume",
